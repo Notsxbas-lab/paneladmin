@@ -1,15 +1,8 @@
-const socket = io('https://chatgeneral-ul1z.onrender.com', {
-  transports: ['websocket', 'polling'],
-  withCredentials: false,
-  reconnection: true,
-  reconnectionAttempts: 10,
-  reconnectionDelay: 1000,
-  reconnectionDelayMax: 5000,
-  timeout: 20000
-});
 
 // La conexión con el servidor de chatgeneral (https://chatgeneral-ul1z.onrender.com)
 // se inicializa en index.html y la variable global 'socket' ya está disponible aquí.
+// Usar window.socket para asegurar que se usa la instancia global
+const socket = window.socket;
 
 
 
