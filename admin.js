@@ -97,30 +97,36 @@ function submitAdminLogin() {
   const username = adminLoginUsername.value.trim();
   const password = adminLoginPassword.value.trim();
   loginError.classList.remove('show');
+  adminLoginBtn.disabled = true;
   if (!username || !password) {
     loginError.textContent = 'Completa todos los campos';
     loginError.classList.add('show');
+    adminLoginBtn.disabled = false;
+    updateLoginButtonState('default');
     return;
   }
-  if (!socket.connected) {
+  if (!socket || socket.disconnected) {
     connectionAttempts++;
     updateLoginButtonState('connecting');
     if (connectionAttempts > MAX_CONNECTION_ATTEMPTS) {
       loginError.textContent = 'No se pudo conectar al servidor. El servidor puede estar despertando (toma ~30 segundos en Render). Recarga la página e intenta de nuevo.';
       loginError.classList.add('show');
       connectionAttempts = 0;
+      adminLoginBtn.disabled = false;
       updateLoginButtonState('error');
       return;
     }
     loginError.textContent = `Conectando al servidor... (intento ${connectionAttempts}/${MAX_CONNECTION_ATTEMPTS})`;
     loginError.classList.add('show');
-    setTimeout(() => submitAdminLogin(), 2000);
+    setTimeout(() => {
+      adminLoginBtn.disabled = false;
+      updateLoginButtonState('default');
+    }, 2000);
     return;
   }
   // Resetear contador cuando hay conexión
   connectionAttempts = 0;
   updateLoginButtonState('loading');
-  adminLoginBtn.disabled = true;
   socket.emit('adminLogin', { username, password }, (response) => {
     adminLoginBtn.disabled = false;
     updateLoginButtonState('default');
