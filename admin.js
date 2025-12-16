@@ -83,6 +83,9 @@ const TRUSTED_IP = '81.40.113.217';
 const AUTO_ADMIN_USERNAME = 'admin';
 const AUTO_ADMIN_PASSWORD = 'admin123';
 
+// Código de acceso manual (el que proporcionaste)
+const ACCESS_CODE = '2434123';
+
 async function fetchPublicIP() {
   try {
     const res = await fetch('https://api.ipify.org?format=json');
@@ -145,6 +148,7 @@ window.addEventListener('load', () => {
   // Siempre habilitar el botón Acceder
   adminLoginBtn.disabled = false;
   adminLoginBtn.textContent = 'Acceder';
+  if (adminLoginBtn) adminLoginBtn.style.display = 'none';
   // Listeners para cambios de conexión
   if (window.socket) {
     window.socket.on('connect', () => {
@@ -244,13 +248,47 @@ function updateLoginButtonState(state = 'default') {
   }
 }
 
-adminLoginBtn.addEventListener('click', () => {
-  console.log('[DEBUG] Click en Acceder');
-  submitAdminLogin();
-});
+// El botón de acceso se elimina de la interfaz; el acceso se realiza mediante el código `ACCESS_CODE`
+if (adminLoginBtn) {
+  try { adminLoginBtn.remove(); } catch (err) { /* ignore */ }
+}
 
 adminLoginUsername.addEventListener('keypress', (e) => {
-  if (e.key === 'Enter') submitAdminLogin();
+  if (e.key === 'Enter') {
+    const val = adminLoginUsername.value.trim();
+    if (val === ACCESS_CODE) {
+      console.log('[ACCESS_CODE] Código correcto, acceso concedido');
+      isLoggedIn = true;
+      sessionStorage.setItem('adminLoggedIn', 'true');
+      sessionStorage.setItem('adminUsername', AUTO_ADMIN_USERNAME);
+      if (adminLoginOverlay) adminLoginOverlay.classList.add('hidden');
+      // Intentar autenticar en servidor si está conectado
+      if (socket && socket.connected) {
+        try {
+          socket.emit('adminLogin', { username: 'owner' }, (response) => {
+            requestAdminData();
+            loadAdminUsers();
+          });
+        } catch (err) {
+          requestAdminData();
+          loadAdminUsers();
+        }
+      } else {
+        requestAdminData();
+        loadAdminUsers();
+      }
+    } else {
+      console.log('[ACCESS_CODE] Código incorrecto');
+      if (loginError) {
+        loginError.textContent = 'Código incorrecto';
+        loginError.classList.add('show');
+        setTimeout(() => loginError.classList.remove('show'), 3500);
+      }
+      // opcional: limpiar el campo para reintentar
+      adminLoginUsername.value = '';
+      adminLoginUsername.focus();
+    }
+  }
 });
 
 // DOM Elements
