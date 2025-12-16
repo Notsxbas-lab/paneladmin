@@ -76,6 +76,10 @@ window.addEventListener('load', () => {
   }
 });
 
+// Contador de intentos de conexión
+let connectionAttempts = 0;
+const MAX_CONNECTION_ATTEMPTS = 15;
+
 function submitAdminLogin() {
   const username = adminLoginUsername.value.trim();
   const password = adminLoginPassword.value.trim();
@@ -89,11 +93,21 @@ function submitAdminLogin() {
   }
 
   if (!socket.connected) {
-    loginError.textContent = 'Conectando al servidor...';
+    connectionAttempts++;
+    if (connectionAttempts > MAX_CONNECTION_ATTEMPTS) {
+      loginError.textContent = 'No se pudo conectar al servidor. El servidor puede estar despertando (toma ~30 segundos en Render). Recarga la página e intenta de nuevo.';
+      loginError.classList.add('show');
+      connectionAttempts = 0;
+      return;
+    }
+    loginError.textContent = `Conectando al servidor... (intento ${connectionAttempts}/${MAX_CONNECTION_ATTEMPTS})`;
     loginError.classList.add('show');
-    setTimeout(() => submitAdminLogin(), 1000);
+    setTimeout(() => submitAdminLogin(), 2000);
     return;
   }
+
+  // Resetear contador cuando hay conexión
+  connectionAttempts = 0;
 
   socket.emit('adminLogin', { username, password }, (response) => {
     console.log('Respuesta del servidor:', response);

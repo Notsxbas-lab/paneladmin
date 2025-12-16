@@ -209,6 +209,7 @@
       <div class="admin-login-box">
         <h1>🔐</h1>
         <p>Acceso al Panel de Administración</p>
+        <div id="connectionStatus" style="font-size:0.85rem;margin-bottom:12px;font-weight:500">🟡 Conectando al servidor...</div>
         <div class="login-error" id="loginError">Credenciales incorrectas</div>
         <input id="adminLoginUsername" type="text" placeholder="Nombre de usuario admin" autofocus style="margin-bottom:12px" />
         <input id="adminLoginPassword" type="password" placeholder="Contraseña" />
@@ -219,7 +220,7 @@
     <div class="admin-header">
       <div>
         <h1>🔑 Panel Administrador</h1>
-        <p>Control total del chat global</p>
+        <p>Control total del chat global <span id="headerConnectionStatus" style="font-size:0.8rem;margin-left:8px">🟡</span></p>
       </div>
       <a href="https://chatgeneral.onrender.com" class="admin-back-btn" target="_blank">← Ir al Chat</a>
     </div>
@@ -564,8 +565,105 @@
       // Conexión al servidor de chatgeneral en Render
       const socket = io('https://chatgeneral.onrender.com', {
         transports: ['websocket', 'polling'],
-        withCredentials: false
+        withCredentials: false,
+        reconnection: true,
+        reconnectionAttempts: 10,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000,
+        timeout: 20000
       });
+
+      // Estado de conexión global
+      let connectionStatus = 'connecting';
+
+      socket.on('connect', () => {
+        console.log('✅ Conectado al servidor de chat');
+        connectionStatus = 'connected';
+        updateConnectionUI();
+      });
+
+      socket.on('disconnect', (reason) => {
+        console.log('❌ Desconectado del servidor:', reason);
+        connectionStatus = 'disconnected';
+        updateConnectionUI();
+      });
+
+      socket.on('connect_error', (error) => {
+        console.log('⚠️ Error de conexión:', error.message);
+        connectionStatus = 'error';
+        updateConnectionUI();
+      });
+
+      socket.on('reconnecting', (attemptNumber) => {
+        console.log('🔄 Reconectando... intento', attemptNumber);
+        connectionStatus = 'reconnecting';
+        updateConnectionUI();
+      });
+
+      socket.on('reconnect', () => {
+        console.log('✅ Reconexión exitosa');
+        connectionStatus = 'connected';
+        updateConnectionUI();
+      });
+
+      function updateConnectionUI() {
+        const statusIndicator = document.getElementById('connectionStatus');
+        const headerStatus = document.getElementById('headerConnectionStatus');
+        const loginError = document.getElementById('loginError');
+        
+        if (statusIndicator) {
+          switch(connectionStatus) {
+            case 'connected':
+              statusIndicator.innerHTML = '🟢 Conectado al servidor';
+              statusIndicator.style.color = '#00d084';
+              break;
+            case 'disconnected':
+              statusIndicator.innerHTML = '🔴 Desconectado';
+              statusIndicator.style.color = '#d32f2f';
+              break;
+            case 'connecting':
+              statusIndicator.innerHTML = '🟡 Conectando...';
+              statusIndicator.style.color = '#ffa500';
+              break;
+            case 'reconnecting':
+              statusIndicator.innerHTML = '🟡 Reconectando...';
+              statusIndicator.style.color = '#ffa500';
+              break;
+            case 'error':
+              statusIndicator.innerHTML = '🔴 Error de conexión';
+              statusIndicator.style.color = '#d32f2f';
+              break;
+          }
+        }
+
+        // Actualizar indicador del header
+        if (headerStatus) {
+          switch(connectionStatus) {
+            case 'connected':
+              headerStatus.innerHTML = '🟢';
+              headerStatus.title = 'Conectado al servidor';
+              break;
+            case 'disconnected':
+              headerStatus.innerHTML = '🔴';
+              headerStatus.title = 'Desconectado del servidor';
+              break;
+            case 'connecting':
+            case 'reconnecting':
+              headerStatus.innerHTML = '🟡';
+              headerStatus.title = 'Conectando...';
+              break;
+            case 'error':
+              headerStatus.innerHTML = '🔴';
+              headerStatus.title = 'Error de conexión';
+              break;
+          }
+        }
+
+        // También actualizar el mensaje de login si existe
+        if (loginError && connectionStatus === 'connected') {
+          loginError.classList.remove('show');
+        }
+      }
     </script>
     <script src="admin.js"></script>
   </body>
