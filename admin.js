@@ -1,10 +1,11 @@
-const pendingSocketHandlers = [];
-const pendingEmits = [];
-let socket = {
-  on: (event, handler) => pendingSocketHandlers.push({ event, handler }),
-  emit: (...args) => pendingEmits.push({ args }),
-  connected: false
-};
+var pendingSocketHandlers = window.__pendingSocketHandlers = window.__pendingSocketHandlers || [];
+var pendingEmits = window.__pendingEmits = window.__pendingEmits || [];
+var socket = window.__adminSocket || (window.__adminSocket = {
+  on: function(event, handler) { pendingSocketHandlers.push({ event, handler }); },
+  emit: function() { pendingEmits.push({ args: Array.prototype.slice.call(arguments) }); },
+  connected: false,
+  _isReal: false
+});
 const SOCKET_IO_SRC = 'https://cdn.socket.io/4.7.2/socket.io.min.js';
 function initSocket() {
   const create = () => {
