@@ -1,3 +1,6 @@
+// La conexión con el servidor de chatgeneral (https://chatgeneral-ul1z.onrender.com)
+// se inicializa en index.html y la variable global 'socket' ya está disponible aquí.
+
 
 
 let confirmCallback = null;
