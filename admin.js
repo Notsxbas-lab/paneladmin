@@ -1,9 +1,8 @@
+
 // La conexión con el servidor de chatgeneral (https://chatgeneral-ul1z.onrender.com)
 // se inicializa en index.html y la variable global 'socket' ya está disponible aquí.
 // Usar window.socket para asegurar que se usa la instancia global
 const socket = window.socket;
-
-
 
 let confirmCallback = null;
 
@@ -141,26 +140,41 @@ function submitAdminLogin() {
   // Resetear contador cuando hay conexión
   connectionAttempts = 0;
   updateLoginButtonState('loading');
-  socket.emit('adminLogin', { username, password }, (response) => {
+  console.log('[LOGIN] Enviando credenciales:', { username, password });
+  try {
+    socket.emit('adminLogin', { username, password }, (response) => {
+      adminLoginBtn.disabled = false;
+      updateLoginButtonState('default');
+      console.log('[LOGIN] Respuesta del servidor:', response);
+      if (!response) {
+        loginError.textContent = 'No hay respuesta del servidor. Revisa la consola (F12) para más detalles.';
+        loginError.classList.add('show');
+        return;
+      }
+      if (response.success) {
+        isLoggedIn = true;
+        sessionStorage.setItem('adminLoggedIn', 'true');
+        sessionStorage.setItem('adminUsername', username);
+        sessionStorage.setItem('adminPassword', password);
+        adminLoginOverlay.classList.add('hidden');
+        requestAdminData();
+        loadAdminUsers();
+        console.log('[LOGIN] Acceso concedido.');
+      } else {
+        console.error('[LOGIN] Fallido para:', username, response);
+        loginError.textContent = response.message || 'Usuario o contraseña incorrectos';
+        loginError.classList.add('show');
+        adminLoginPassword.value = '';
+        adminLoginUsername.focus();
+      }
+    });
+  } catch (err) {
+    console.error('[LOGIN] Error al emitir evento adminLogin:', err);
+    loginError.textContent = 'Error inesperado al intentar acceder. Revisa la consola (F12).';
+    loginError.classList.add('show');
     adminLoginBtn.disabled = false;
-    updateLoginButtonState('default');
-    console.log('Respuesta del servidor:', response);
-    if (response && response.success) {
-      isLoggedIn = true;
-      sessionStorage.setItem('adminLoggedIn', 'true');
-      sessionStorage.setItem('adminUsername', username);
-      sessionStorage.setItem('adminPassword', password);
-      adminLoginOverlay.classList.add('hidden');
-      requestAdminData();
-      loadAdminUsers();
-    } else {
-      console.error('Login fallido para:', username);
-      loginError.textContent = 'Usuario o contraseña incorrectos';
-      loginError.classList.add('show');
-      adminLoginPassword.value = '';
-      adminLoginUsername.focus();
-    }
-  });
+    updateLoginButtonState('error');
+  }
 }
 
 function updateLoginButtonState(state = 'default') {
