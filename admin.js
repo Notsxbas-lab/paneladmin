@@ -1,4 +1,4 @@
-  'Enter' && promoteModal?.classList.contains('active')) {
+const socket = io('https://chatgeneral-ul1z.onrender.com', {
 const socket = io('https://chatgeneral-ul1z.onrender.com', {
   transports: ['websocket', 'polling'],
   withCredentials: false,
