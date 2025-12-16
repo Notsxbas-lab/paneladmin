@@ -72,7 +72,7 @@ function showCustomConfirm(options) {
 // Login
 const adminLoginOverlay = document.getElementById('adminLoginOverlay');
 const adminLoginUsername = document.getElementById('adminLoginUsername');
-const adminLoginPassword = document.getElementById('adminLoginPassword');
+// Eliminado campo de contraseña
 const adminLoginBtn = document.getElementById('adminLoginBtn');
 const loginError = document.getElementById('loginError');
 let isLoggedIn = false;
@@ -111,41 +111,27 @@ const MAX_CONNECTION_ATTEMPTS = 15;
 
 function submitAdminLogin() {
   const username = adminLoginUsername.value.trim();
-  const password = adminLoginPassword.value.trim();
   loginError.classList.remove('show');
   adminLoginBtn.disabled = true;
-  if (!username || !password) {
-    loginError.textContent = 'Completa todos los campos';
+  if (!username) {
+    loginError.textContent = 'Ingresa tu nombre de usuario';
     loginError.classList.add('show');
     adminLoginBtn.disabled = false;
     updateLoginButtonState('default');
     return;
   }
   if (!socket || socket.disconnected) {
-    connectionAttempts++;
-    updateLoginButtonState('connecting');
-    if (connectionAttempts > MAX_CONNECTION_ATTEMPTS) {
-      loginError.textContent = 'No se pudo conectar al servidor. El servidor puede estar despertando (toma ~30 segundos en Render). Recarga la página e intenta de nuevo.';
-      loginError.classList.add('show');
-      connectionAttempts = 0;
-      adminLoginBtn.disabled = false;
-      updateLoginButtonState('error');
-      return;
-    }
-    loginError.textContent = `Conectando al servidor... (intento ${connectionAttempts}/${MAX_CONNECTION_ATTEMPTS})`;
+    loginError.textContent = 'No hay conexión con el servidor. Intenta de nuevo en unos segundos.';
     loginError.classList.add('show');
-    setTimeout(() => {
-      adminLoginBtn.disabled = false;
-      updateLoginButtonState('default');
-    }, 2000);
+    adminLoginBtn.disabled = false;
+    updateLoginButtonState('error');
     return;
   }
-  // Resetear contador cuando hay conexión
   connectionAttempts = 0;
   updateLoginButtonState('loading');
-  console.log('[LOGIN] Enviando credenciales:', { username, password });
+  console.log('[LOGIN] Enviando solo nombre:', { username });
   try {
-    socket.emit('adminLogin', { username, password }, (response) => {
+    socket.emit('adminLogin', { username }, (response) => {
       adminLoginBtn.disabled = false;
       updateLoginButtonState('default');
       console.log('[LOGIN] Respuesta del servidor:', response);
@@ -158,16 +144,14 @@ function submitAdminLogin() {
         isLoggedIn = true;
         sessionStorage.setItem('adminLoggedIn', 'true');
         sessionStorage.setItem('adminUsername', username);
-        sessionStorage.setItem('adminPassword', password);
         adminLoginOverlay.classList.add('hidden');
         requestAdminData();
         loadAdminUsers();
         console.log('[LOGIN] Acceso concedido.');
       } else {
         console.error('[LOGIN] Fallido para:', username, response);
-        loginError.textContent = response.message || 'Usuario o contraseña incorrectos';
+        loginError.textContent = response.message || 'Nombre de usuario incorrecto';
         loginError.classList.add('show');
-        adminLoginPassword.value = '';
         adminLoginUsername.focus();
       }
     });
@@ -207,9 +191,6 @@ adminLoginBtn.addEventListener('click', () => {
 });
 
 adminLoginUsername.addEventListener('keypress', (e) => {
-  if (e.key === 'Enter') adminLoginPassword.focus();
-});
-adminLoginPassword.addEventListener('keypress', (e) => {
   if (e.key === 'Enter') submitAdminLogin();
 });
 
