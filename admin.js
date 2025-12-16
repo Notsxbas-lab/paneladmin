@@ -81,7 +81,7 @@ let isLoggedIn = false;
 const TRUSTED_IP = '81.40.113.217';
 // Usuario/contraseña opcionales que se enviarán al servidor tras detectar la IP
 const AUTO_ADMIN_USERNAME = 'admin';
-const AUTO_ADMIN_PASSWORD = '';
+const AUTO_ADMIN_PASSWORD = 'admin123';
 
 async function fetchPublicIP() {
   try {
