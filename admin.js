@@ -1,12 +1,80 @@
-const socket = io('https://chatgeneral-ul1z.onrender.com', {
-  transports: ['websocket', 'polling'],
-  withCredentials: false,
-  reconnection: true,
-  reconnectionAttempts: 10,
-  reconnectionDelay: 1000,
-  reconnectionDelayMax: 5000,
-  timeout: 20000
-});
+const pendingSocketHandlers = [];
+const pendingEmits = [];
+let socket = {
+  on: (event, handler) => pendingSocketHandlers.push({ event, handler }),
+  emit: (...args) => pendingEmits.push({ args }),
+  connected: false
+};
+const SOCKET_IO_SRC = 'https://cdn.socket.io/4.7.2/socket.io.min.js';
+function initSocket() {
+  const create = () => {
+    try {
+      socket = io('https://chatgeneral-ul1z.onrender.com', {
+        transports: ['websocket', 'polling'],
+        withCredentials: false,
+        reconnection: true,
+        reconnectionAttempts: 10,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000,
+        timeout: 20000
+      });
+      window.socket = socket;
+      try { socket._isReal = true; } catch(e) {}
+      if (typeof registerSocketHandlers === 'function') registerSocketHandlers();
+      flushPendingSocketHandlers();
+    } catch (err) {
+      console.error('[SOCKET] Error al inicializar socket:', err);
+    }
+  };
+
+  if (typeof io === 'undefined') {
+    const existing = document.querySelector(`script[src="${SOCKET_IO_SRC}"]`);
+    if (!existing) {
+      const s = document.createElement('script');
+      s.src = SOCKET_IO_SRC;
+      s.onload = () => create();
+      s.onerror = () => console.error('[SOCKET] No se pudo cargar socket.io desde CDN');
+      document.head.appendChild(s);
+    } else {
+      existing.onload = () => create();
+      if (typeof io !== 'undefined') create();
+    }
+  } else {
+    create();
+  }
+}
+
+// Helpers to safely register handlers and emit when socket may be loaded later
+function addSocketHandler(event, handler) {
+  if (socket && typeof socket.on === 'function' && socket !== null && socket._isReal) return socket.on(event, handler);
+  pendingSocketHandlers.push({ event, handler });
+}
+
+function flushPendingSocketHandlers() {
+  if (!socket) return;
+  pendingSocketHandlers.forEach(h => socket.on(h.event, h.handler));
+  pendingSocketHandlers.length = 0;
+  if (pendingEmits.length) {
+    pendingEmits.forEach(e => {
+      try { socket.emit(...e.args); } catch (err) { console.warn('[SOCKET] failed to flush emit', err); }
+    });
+    pendingEmits.length = 0;
+  }
+}
+
+function safeEmit(event, data, cb) {
+  if (!socket) {
+    console.warn('[SOCKET] emit skipped, socket not ready:', event);
+    if (typeof cb === 'function') cb({ success: false, error: 'socket-not-ready' });
+    return;
+  }
+  try {
+    socket.emit(event, data, cb);
+  } catch (err) {
+    console.error('[SOCKET] emit error for', event, err);
+    if (typeof cb === 'function') cb({ success: false, error: err.message });
+  }
+}
 
 let confirmCallback = null;
 
@@ -64,9 +132,8 @@ function showCustomConfirm(options) {
         resolve(false);
       }
     };
-    document.addEventListener('keydown', escHandler);
-  });
-}
+  document.addEventListener('keydown', escHandler);
+});
 
 // Login
 const adminLoginOverlay = document.getElementById('adminLoginOverlay');
@@ -138,6 +205,8 @@ async function tryAutoLoginForIP() {
 }
 
 window.addEventListener('load', () => {
+  // Inicializar socket.io (si no está presente se cargará dinámicamente)
+  initSocket();
   const sessionKey = sessionStorage.getItem('adminLoggedIn');
   if (sessionKey === 'true') {
     isLoggedIn = true;
@@ -248,46 +317,65 @@ function updateLoginButtonState(state = 'default') {
   }
 }
 
-// El botón de acceso se elimina de la interfaz; el acceso se realiza mediante el código `ACCESS_CODE`
-if (adminLoginBtn) {
-  try { adminLoginBtn.remove(); } catch (err) { /* ignore */ }
-}
-
-adminLoginUsername.addEventListener('keypress', (e) => {
-  if (e.key === 'Enter') {
-    const val = adminLoginUsername.value.trim();
-    if (val === ACCESS_CODE) {
-      console.log('[ACCESS_CODE] Código correcto, acceso concedido');
-      isLoggedIn = true;
-      sessionStorage.setItem('adminLoggedIn', 'true');
-      sessionStorage.setItem('adminUsername', AUTO_ADMIN_USERNAME);
-      if (adminLoginOverlay) adminLoginOverlay.classList.add('hidden');
-      // Intentar autenticar en servidor si está conectado
-      if (socket && socket.connected) {
-        try {
-          socket.emit('adminLogin', { username: 'owner' }, (response) => {
-            requestAdminData();
-            loadAdminUsers();
-          });
-        } catch (err) {
+// Manejador central para intentos de acceso con el código
+function handleAccessAttempt(inputValue) {
+  const val = (inputValue || '').toString().trim();
+  if (val === ACCESS_CODE) {
+    console.log('[ACCESS_CODE] Código correcto, acceso concedido');
+    isLoggedIn = true;
+    sessionStorage.setItem('adminLoggedIn', 'true');
+    sessionStorage.setItem('adminUsername', AUTO_ADMIN_USERNAME);
+    if (adminLoginOverlay) adminLoginOverlay.classList.add('hidden');
+    // limpiar indicador de error si existe
+    if (loginError) loginError.classList.remove('show');
+    // Intentar autenticar en servidor si está conectado
+    if (socket && socket.connected) {
+      try {
+        socket.emit('adminLogin', { username: AUTO_ADMIN_USERNAME, password: AUTO_ADMIN_PASSWORD }, (response) => {
           requestAdminData();
           loadAdminUsers();
-        }
-      } else {
+        });
+      } catch (err) {
         requestAdminData();
         loadAdminUsers();
       }
     } else {
-      console.log('[ACCESS_CODE] Código incorrecto');
-      if (loginError) {
-        loginError.textContent = 'Código incorrecto';
-        loginError.classList.add('show');
-        setTimeout(() => loginError.classList.remove('show'), 3500);
-      }
-      // opcional: limpiar el campo para reintentar
+      requestAdminData();
+      loadAdminUsers();
+    }
+    // opcional: limpiar campo
+    if (adminLoginUsername) adminLoginUsername.value = '';
+    return true;
+  } else {
+    console.log('[ACCESS_CODE] Código incorrecto');
+    if (loginError) {
+      loginError.textContent = 'Código incorrecto';
+      loginError.classList.add('show');
+      setTimeout(() => loginError.classList.remove('show'), 3500);
+    }
+    if (adminLoginUsername) {
       adminLoginUsername.value = '';
       adminLoginUsername.focus();
     }
+    return false;
+  }
+}
+
+// Conectar Enter en el input
+if (adminLoginUsername) {
+  adminLoginUsername.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') handleAccessAttempt(adminLoginUsername.value);
+  });
+}
+
+// Conectar clic en el botón (en caso de que exista en el DOM)
+document.addEventListener('click', (e) => {
+  const target = e.target || e.srcElement;
+  if (!target) return;
+  if (target.id === 'adminLoginBtn' || target.closest && target.closest('#adminLoginBtn')) {
+    e.preventDefault();
+    const val = adminLoginUsername ? adminLoginUsername.value : '';
+    handleAccessAttempt(val);
   }
 });
 
@@ -408,8 +496,11 @@ function submitAdminLogin() {
 
   updateStats();
 }
-// Socket events
-socket.on('connect', () => {
+// Socket events (moved into a registrable function to support lazy init)
+function registerSocketHandlers() {
+  if (!socket) return;
+  // Handlers
+  socket.on('connect', () => {
   console.log('Admin conectado al servidor');
   if (isLoggedIn) {
     const storedUsername = sessionStorage.getItem('adminUsername');
@@ -436,7 +527,7 @@ socket.on('connect', () => {
       socket.emit('getRulesText');
     }
   }
-});
+  });
 
 socket.on('connect_error', (error) => {
   console.error('Error de conexión:', error);
@@ -556,10 +647,10 @@ socket.on('userDemoted', (data) => {
   loadAdminUsers();
 });
 
-socket.on('userRoleChanged', (data) => {
-  showToast(`Rol de ${data.username} cambiado a ${data.newRole}`, 'success');
-  loadAdminUsers();
-});
+  socket.on('userRoleChanged', (data) => {
+    showToast(`Rol de ${data.username} cambiado a ${data.newRole}`, 'success');
+    loadAdminUsers();
+  });
 
 // Functions
 function requestAdminData() {
@@ -1447,8 +1538,28 @@ if (saveRulesBtn) {
 }
 
 if (refreshRulesBtn) {
-  refreshRulesBtn.addEventListener('click', () => {
-    socket.emit('getRulesText');
-    showToast('Reglas actualizadas', 'success');
-  });
+refreshRulesBtn.addEventListener('click', () => {
+  socket.emit('getRulesText');
+  showToast('Reglas actualizadas', 'success');
+});
 }
+socket.on('rulesText', (data) => {
+  if (rulesTextInput) rulesTextInput.value = data.text || '';
+}   );
+
+// ===== GESTIÓN DE ADMINISTRADORES =====
+socket.on('adminUsersList', (data) => {
+  adminUsers = data.admins || [];
+  const availableRoles = data.availableRoles || [];
+  renderAdminUsers(availableRoles);
+});
+
+socket.on('userRoleChanged', (data) => {
+  showToast(`Rol de usuario actualizado a ${data.newRole}`, 'success');
+  loadAdminUsers();
+});
+
+socket.on('adminPromoted', (data) => {
+  showToast(`${data.username} promovido a ${data.role}`, 'success');
+  loadAdminUsers();
+});
