@@ -85,24 +85,22 @@ window.addEventListener('load', () => {
     restoreAdminStateFromCache();
   }
   updateLoginButtonState();
-  // Si el socket no está conectado, deshabilitar el botón hasta que se conecte
-  if (!window.socket || window.socket.disconnected) {
-    adminLoginBtn.disabled = true;
-    adminLoginBtn.textContent = 'Conectando...';
-  }
-  // Cuando el socket se conecte, habilitar el botón
+  // Siempre habilitar el botón Acceder
+  adminLoginBtn.disabled = false;
+  adminLoginBtn.textContent = 'Acceder';
+  // Listeners para cambios de conexión
   if (window.socket) {
     window.socket.on('connect', () => {
       adminLoginBtn.disabled = false;
       adminLoginBtn.textContent = 'Acceder';
     });
     window.socket.on('disconnect', () => {
-      adminLoginBtn.disabled = true;
-      adminLoginBtn.textContent = 'Conectando...';
+      adminLoginBtn.disabled = false;
+      adminLoginBtn.textContent = 'Acceder';
     });
     window.socket.on('connect_error', () => {
-      adminLoginBtn.disabled = true;
-      adminLoginBtn.textContent = 'Sin conexión';
+      adminLoginBtn.disabled = false;
+      adminLoginBtn.textContent = 'Acceder';
     });
   }
 });
@@ -203,7 +201,10 @@ function updateLoginButtonState(state = 'default') {
   }
 }
 
-adminLoginBtn.addEventListener('click', submitAdminLogin);
+adminLoginBtn.addEventListener('click', () => {
+  console.log('[DEBUG] Click en Acceder');
+  submitAdminLogin();
+});
 
 adminLoginUsername.addEventListener('keypress', (e) => {
   if (e.key === 'Enter') adminLoginPassword.focus();
@@ -254,76 +255,65 @@ let hasPassword = false;
 let adminUsers = [];
 
 // Persistencia en sesión
-const STORAGE_KEYS = {
-  users: 'adminPanel_users',
-  bannedIps: 'adminPanel_bannedIps',
-  rooms: 'adminPanel_rooms',
-  chatRunning: 'adminPanel_chatRunning',
-  adminUsers: 'adminPanel_adminUsers',
-  adminRoles: 'adminPanel_adminRoles',
-  badWords: 'adminPanel_badWords',
-  messageHistory: 'adminPanel_messageHistory',
-  reports: 'adminPanel_reports'
-};
-const DEFAULT_ROLES = ['Mod Junior', 'Mod', 'Admin', 'Dueño'];
-
-function saveState(key, value) {
+function submitAdminLogin() {
+  const username = adminLoginUsername.value.trim();
+  const password = adminLoginPassword.value.trim();
+  loginError.classList.remove('show');
+  adminLoginBtn.disabled = true;
+  if (!username || !password) {
+    loginError.textContent = 'Completa todos los campos';
+    loginError.classList.add('show');
+    adminLoginBtn.disabled = false;
+    updateLoginButtonState('default');
+    return;
+  }
+  // Permitir siempre intentar login, aunque el socket no esté listo
+  if (!socket || socket.disconnected) {
+    loginError.textContent = 'No hay conexión con el servidor. Intenta de nuevo en unos segundos.';
+    loginError.classList.add('show');
+    adminLoginBtn.disabled = false;
+    updateLoginButtonState('error');
+    return;
+  }
+  // Resetear contador cuando hay conexión
+  connectionAttempts = 0;
+  updateLoginButtonState('loading');
+  console.log('[LOGIN] Enviando credenciales:', { username, password });
   try {
-    sessionStorage.setItem(key, JSON.stringify(value));
+    socket.emit('adminLogin', { username, password }, (response) => {
+      adminLoginBtn.disabled = false;
+      updateLoginButtonState('default');
+      console.log('[LOGIN] Respuesta del servidor:', response);
+      if (!response) {
+        loginError.textContent = 'No hay respuesta del servidor. Revisa la consola (F12) para más detalles.';
+        loginError.classList.add('show');
+        return;
+      }
+      if (response.success) {
+        isLoggedIn = true;
+        sessionStorage.setItem('adminLoggedIn', 'true');
+        sessionStorage.setItem('adminUsername', username);
+        sessionStorage.setItem('adminPassword', password);
+        adminLoginOverlay.classList.add('hidden');
+        requestAdminData();
+        loadAdminUsers();
+        console.log('[LOGIN] Acceso concedido.');
+      } else {
+        console.error('[LOGIN] Fallido para:', username, response);
+        loginError.textContent = response.message || 'Usuario o contraseña incorrectos';
+        loginError.classList.add('show');
+        adminLoginPassword.value = '';
+        adminLoginUsername.focus();
+      }
+    });
   } catch (err) {
-    console.warn('No se pudo guardar estado', key, err);
+    console.error('[LOGIN] Error al emitir evento adminLogin:', err);
+    loginError.textContent = 'Error inesperado al intentar acceder. Revisa la consola (F12).';
+    loginError.classList.add('show');
+    adminLoginBtn.disabled = false;
+    updateLoginButtonState('error');
   }
 }
-
-function loadState(key, fallback = null) {
-  try {
-    const raw = sessionStorage.getItem(key);
-    if (!raw) return fallback;
-    return JSON.parse(raw);
-  } catch (err) {
-    console.warn('No se pudo leer estado', key, err);
-    return fallback;
-  }
-}
-
-function restoreAdminStateFromCache() {
-  const cachedUsers = loadState(STORAGE_KEYS.users);
-  if (Array.isArray(cachedUsers)) {
-    users = cachedUsers;
-    renderUsers();
-  }
-
-  const cachedBanned = loadState(STORAGE_KEYS.bannedIps);
-  if (Array.isArray(cachedBanned)) {
-    bannedIps = cachedBanned;
-    renderBannedIps();
-  }
-
-  const cachedRooms = loadState(STORAGE_KEYS.rooms);
-  if (Array.isArray(cachedRooms)) {
-    rooms = new Set(cachedRooms);
-  }
-
-  const cachedChatRunning = loadState(STORAGE_KEYS.chatRunning);
-  if (typeof cachedChatRunning === 'boolean') {
-    chatRunning = cachedChatRunning;
-    updateChatStatus();
-  }
-
-  const cachedAdmins = loadState(STORAGE_KEYS.adminUsers);
-  const cachedRoles = loadState(STORAGE_KEYS.adminRoles, DEFAULT_ROLES);
-  if (Array.isArray(cachedAdmins) && cachedAdmins.length > 0) {
-    adminUsers = cachedAdmins;
-    renderAdminUsers(cachedRoles || DEFAULT_ROLES);
-  }
-
-  const cachedBadWords = loadState(STORAGE_KEYS.badWords);
-  if (Array.isArray(cachedBadWords)) {
-    badWordsList = cachedBadWords;
-    renderBadWords();
-  }
-
-  const cachedHistory = loadState(STORAGE_KEYS.messageHistory);
   if (cachedHistory) {
     const historyList = document.getElementById('messageHistoryList');
     if (historyList) {
