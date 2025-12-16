@@ -1538,14 +1538,15 @@ if (saveRulesBtn) {
 }
 
 if (refreshRulesBtn) {
-refreshRulesBtn.addEventListener('click', () => {
-  socket.emit('getRulesText');
-  showToast('Reglas actualizadas', 'success');
-});
+  refreshRulesBtn.addEventListener('click', () => {
+    socket.emit('getRulesText');
+    showToast('Reglas actualizadas', 'success');
+  });
 }
+
 socket.on('rulesText', (data) => {
   if (rulesTextInput) rulesTextInput.value = data.text || '';
-}   );
+});
 
 // ===== GESTIÓN DE ADMINISTRADORES =====
 socket.on('adminUsersList', (data) => {
