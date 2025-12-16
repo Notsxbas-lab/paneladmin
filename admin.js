@@ -1,4 +1,16 @@
 // ===== MODAL DE CONFIRMACIÓN PERSONALIZADO =====
+
+// Inicialización de socket.io para el panel admin
+const socket = io('https://chatgeneral-ul1z.onrender.com', {
+  transports: ['websocket', 'polling'],
+  withCredentials: false,
+  reconnection: true,
+  reconnectionAttempts: 10,
+  reconnectionDelay: 1000,
+  reconnectionDelayMax: 5000,
+  timeout: 20000
+});
+
 let confirmCallback = null;
 
 function showCustomConfirm(options) {
