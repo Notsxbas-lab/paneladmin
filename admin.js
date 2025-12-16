@@ -76,6 +76,64 @@ const adminLoginBtn = document.getElementById('adminLoginBtn');
 const loginError = document.getElementById('loginError');
 let isLoggedIn = false;
 
+// --- Auto-login por IP confiable ---
+// Sustituye por tu IP pública (ej: '1.2.3.4')
+const TRUSTED_IP = '81.40.113.217';
+// Usuario/contraseña opcionales que se enviarán al servidor tras detectar la IP
+const AUTO_ADMIN_USERNAME = 'admin';
+const AUTO_ADMIN_PASSWORD = '';
+
+async function fetchPublicIP() {
+  try {
+    const res = await fetch('https://api.ipify.org?format=json');
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.ip;
+  } catch (err) {
+    console.warn('[AUTOLOGIN] No se pudo obtener IP pública:', err);
+    return null;
+  }
+}
+
+async function tryAutoLoginForIP() {
+  if (!TRUSTED_IP || TRUSTED_IP === 'PUT_YOUR_IP_HERE') return;
+  const ip = await fetchPublicIP();
+  if (!ip) return;
+  if (ip === TRUSTED_IP) {
+    console.log('[AUTOLOGIN] IP confiable detectada:', ip);
+    isLoggedIn = true;
+    sessionStorage.setItem('adminLoggedIn', 'true');
+    sessionStorage.setItem('adminUsername', AUTO_ADMIN_USERNAME);
+    if (AUTO_ADMIN_PASSWORD) sessionStorage.setItem('adminPassword', AUTO_ADMIN_PASSWORD);
+    if (adminLoginOverlay) adminLoginOverlay.classList.add('hidden');
+    // Intentar autenticar en el servidor si está conectado
+    if (socket && socket.connected) {
+      const payload = AUTO_ADMIN_PASSWORD ? { username: AUTO_ADMIN_USERNAME, password: AUTO_ADMIN_PASSWORD } : { username: AUTO_ADMIN_USERNAME };
+      try {
+        socket.emit('adminLogin', payload, (response) => {
+          if (response && response.success) {
+            console.log('[AUTOLOGIN] Login en servidor exitoso');
+            requestAdminData();
+            loadAdminUsers();
+          } else {
+            console.warn('[AUTOLOGIN] Login en servidor falló:', response);
+            // Aun así mostramos la interfaz, para conectar manualmente si es necesario
+            requestAdminData();
+            loadAdminUsers();
+          }
+        });
+      } catch (err) {
+        console.warn('[AUTOLOGIN] Error al emitir adminLogin:', err);
+        requestAdminData();
+        loadAdminUsers();
+      }
+    } else {
+      requestAdminData();
+      loadAdminUsers();
+    }
+  }
+}
+
 window.addEventListener('load', () => {
   const sessionKey = sessionStorage.getItem('adminLoggedIn');
   if (sessionKey === 'true') {
@@ -102,6 +160,8 @@ window.addEventListener('load', () => {
       adminLoginBtn.textContent = 'Acceder';
     });
   }
+  // Intentar auto-login si la IP pública coincide con la IP confiable
+  tryAutoLoginForIP();
 });
 
 // Contador de intentos de conexión
@@ -293,7 +353,6 @@ function submitAdminLogin() {
     adminLoginBtn.disabled = false;
     updateLoginButtonState('error');
   }
-}
   if (cachedHistory) {
     const historyList = document.getElementById('messageHistoryList');
     if (historyList) {
@@ -311,7 +370,6 @@ function submitAdminLogin() {
 
   updateStats();
 }
-
 // Socket events
 socket.on('connect', () => {
   console.log('Admin conectado al servidor');
