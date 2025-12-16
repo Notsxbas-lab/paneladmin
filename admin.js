@@ -79,6 +79,26 @@ window.addEventListener('load', () => {
     restoreAdminStateFromCache();
   }
   updateLoginButtonState();
+  // Si el socket no está conectado, deshabilitar el botón hasta que se conecte
+  if (!window.socket || window.socket.disconnected) {
+    adminLoginBtn.disabled = true;
+    adminLoginBtn.textContent = 'Conectando...';
+  }
+  // Cuando el socket se conecte, habilitar el botón
+  if (window.socket) {
+    window.socket.on('connect', () => {
+      adminLoginBtn.disabled = false;
+      adminLoginBtn.textContent = 'Acceder';
+    });
+    window.socket.on('disconnect', () => {
+      adminLoginBtn.disabled = true;
+      adminLoginBtn.textContent = 'Conectando...';
+    });
+    window.socket.on('connect_error', () => {
+      adminLoginBtn.disabled = true;
+      adminLoginBtn.textContent = 'Sin conexión';
+    });
+  }
 });
 
 // Contador de intentos de conexión
