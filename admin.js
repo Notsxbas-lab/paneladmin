@@ -1,4 +1,3 @@
-// ===== MODAL DE CONFIRMACIÓN PERSONALIZADO =====
 
 
 let confirmCallback = null;
