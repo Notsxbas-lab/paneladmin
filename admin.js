@@ -86,6 +86,7 @@ window.addEventListener('load', () => {
     adminLoginOverlay.classList.add('hidden');
     restoreAdminStateFromCache();
   }
+  updateLoginButtonState();
 });
 
 // Contador de intentos de conexión
@@ -95,21 +96,20 @@ const MAX_CONNECTION_ATTEMPTS = 15;
 function submitAdminLogin() {
   const username = adminLoginUsername.value.trim();
   const password = adminLoginPassword.value.trim();
-  
   loginError.classList.remove('show');
-  
   if (!username || !password) {
     loginError.textContent = 'Completa todos los campos';
     loginError.classList.add('show');
     return;
   }
-
   if (!socket.connected) {
     connectionAttempts++;
+    updateLoginButtonState('connecting');
     if (connectionAttempts > MAX_CONNECTION_ATTEMPTS) {
       loginError.textContent = 'No se pudo conectar al servidor. El servidor puede estar despertando (toma ~30 segundos en Render). Recarga la página e intenta de nuevo.';
       loginError.classList.add('show');
       connectionAttempts = 0;
+      updateLoginButtonState('error');
       return;
     }
     loginError.textContent = `Conectando al servidor... (intento ${connectionAttempts}/${MAX_CONNECTION_ATTEMPTS})`;
@@ -117,11 +117,13 @@ function submitAdminLogin() {
     setTimeout(() => submitAdminLogin(), 2000);
     return;
   }
-
   // Resetear contador cuando hay conexión
   connectionAttempts = 0;
-
+  updateLoginButtonState('loading');
+  adminLoginBtn.disabled = true;
   socket.emit('adminLogin', { username, password }, (response) => {
+    adminLoginBtn.disabled = false;
+    updateLoginButtonState('default');
     console.log('Respuesta del servidor:', response);
     if (response && response.success) {
       isLoggedIn = true;
@@ -139,6 +141,27 @@ function submitAdminLogin() {
       adminLoginUsername.focus();
     }
   });
+}
+
+function updateLoginButtonState(state = 'default') {
+  if (!adminLoginBtn) return;
+  switch (state) {
+    case 'connecting':
+      adminLoginBtn.textContent = 'Conectando...';
+      adminLoginBtn.disabled = true;
+      break;
+    case 'loading':
+      adminLoginBtn.textContent = 'Accediendo...';
+      adminLoginBtn.disabled = true;
+      break;
+    case 'error':
+      adminLoginBtn.textContent = 'Reintentar';
+      adminLoginBtn.disabled = false;
+      break;
+    default:
+      adminLoginBtn.textContent = 'Acceder';
+      adminLoginBtn.disabled = false;
+  }
 }
 
 adminLoginBtn.addEventListener('click', submitAdminLogin);
